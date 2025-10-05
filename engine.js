@@ -257,6 +257,26 @@ class SPUEngine {
     }
 }
 
+// engine.js
+import readline from 'readline';
+
+// --- Classe principal ---
+class SPUEngine {
+    constructor() {
+        console.log('🧠 SPUEngine inicializado');
+        // ... (resto do construtor e métodos)
+    }
+
+    async runCommand(cmd) {
+        console.log(`🔧 Executando comando: ${cmd}`);
+        // ... (código do método)
+    }
+}
+
+// --- Exportação da classe ---
+export { SPUEngine };
+
+// --- Interface de linha de comando (CLI) ---
 const SPU = new SPUEngine();
 console.log('🚀 SPU iniciado. Digite comandos para simular programação.');
 

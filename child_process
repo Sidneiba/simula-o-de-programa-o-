@@ -1,0 +1,29 @@
+// Em CrossLanguageBridge.js
+import { exec } from 'child_process';
+import util from 'util';
+const execPromise = util.promisify(exec);
+
+class CrossLanguageBridge {
+    constructor() {
+        this.functions = new Map();
+        this.stats = { totalFunctions: 0, byLanguage: {}, mostCalled: [] };
+    }
+
+    async callFunction(name, args) {
+        const fn = this.functions.get(name);
+        if (!fn) throw new Error(`Função '${name}' não encontrada`);
+        
+        if (fn.lang === 'python') {
+            const code = `${fn.body || ''}\n${name}(${args.join(', ')})`;
+            const { stdout, stderr } = await execPromise(`python -c "${code}"`);
+            if (stderr) throw new Error(stderr);
+            return stdout;
+        }
+        // Lógica para JavaScript ou outras linguagens
+        return fn.body(...args);
+    }
+
+    // ... (outros métodos existentes)
+}
+
+export default CrossLanguageBridge;

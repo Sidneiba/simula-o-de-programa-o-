@@ -1,0 +1,64 @@
+import { parse } from 'acorn';
+
+parseCodeToActions(code) {
+    const actions = [];
+    try {
+        if (code.includes('def ') || code.includes('return ')) {
+            // Mantém o parser Python existente
+            const lines = code.split('\n').map(line => line.trim()).filter(line => line);
+            for (const line of lines) {
+                if (line.startsWith('def ')) {
+                    const [_, name, params] = line.match(/def (\w+)\((.*?)\):/) || [];
+                    if (name) {
+                        actions.push({
+                            type: 'function_definition',
+                            details: { name, params: params.split(',').map(p => p.trim()), function: name },
+                            lang: 'python'
+                        });
+                    }
+                } else if (line.startsWith('return ')) {
+                    actions.push({
+                        type: 'return',
+                        details: { value: line.replace('return ', '').trim() },
+                        lang: 'python'
+                    });
+                } else if (line.includes('=')) {
+                    const [variable, value] = line.split('=').map(part => part.trim());
+                    actions.push({
+                        type: 'assignment',
+                        details: { variable, value },
+                        lang: 'python'
+                    });
+                }
+            }
+        } else {
+            // Parser para JavaScript usando acorn
+            const ast = parse(code, { ecmaVersion: 2020 });
+            ast.body.forEach(node => {
+                if (node.type === 'FunctionDeclaration') {
+                    actions.push({
+                        type: 'function_definition',
+                        details: {
+                            name: node.id.name,
+                            params: node.params.map(p => p.name),
+                            function: node.id.name
+                        },
+                        lang: 'javascript'
+                    });
+                } else if (node.type === 'ExpressionStatement' && node.expression.type === 'CallExpression') {
+                    actions.push({
+                        type: 'call',
+                        details: {
+                            function: node.expression.callee.name,
+                            args: node.expression.arguments.map(arg => arg.value || arg.name)
+                        },
+                        lang: 'javascript'
+                    });
+                }
+            });
+        }
+    } catch (error) {
+        console.error(`❌ Erro ao parsear código: ${error.message}`);
+    }
+    return actions;
+}

@@ -1,0 +1,40 @@
+async runCommand(cmd) {
+    console.log('🧠 Interpretando comando:', cmd);
+    const [command, ...args] = cmd.trim().split(' ');
+
+    try {
+        switch (command) {
+            case 'load':
+                const lib = args[0];
+                if (!lib) {
+                    console.log('📝 Uso: load nome_da_biblioteca');
+                    return;
+                }
+                await this.libraryManager.loadLibrary(lib);
+                console.log(`✅ Biblioteca '${lib}' carregada com sucesso`);
+                break;
+
+            case 'status':
+                console.log(this.memory.status());
+                break;
+
+            case 'simular':
+                await this.simular(args.join(' '));
+                break;
+
+            case 'help':
+                this.showHelp();
+                break;
+
+            default:
+                if (this.commands.has(command)) {
+                    await this.commands.get(command)(args.join(' '));
+                } else {
+                    console.log('⚙️ Comando não reconhecido:', cmd);
+                    console.log('Digite "help" para ver os comandos disponíveis.');
+                }
+        }
+    } catch (error) {
+        console.error(`❌ Erro ao executar comando '${cmd}':`, error.message);
+    }
+}
