@@ -11,7 +11,7 @@ async function runCommand() {
         });
         const result = await response.json();
         if (result.status === 'success') {
-            outputDiv.innerText = result.output;
+            outputDiv.innerText = result.output || 'Comando executado. Verifique o console do servidor para detalhes.';
         } else {
             outputDiv.innerText = `Erro: ${result.message}`;
         }

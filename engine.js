@@ -1,4 +1,3 @@
-// spu-universe/engine.js
 import readline from 'readline';
 import { VirtualMemory } from './core/VirtualMemory.js';
 import { LibraryManager } from './libs/LibraryManager.js';
@@ -12,7 +11,20 @@ class SPUEngine {
         this.bridge = new CrossLanguageBridge();
         this.backupManager = new BridgeBackupManager(this.bridge);
         this.commands = new Map();
+        this.output = []; // Para capturar saídas
         this.setupBridgeCommands();
+    }
+
+    // Método para adicionar saída
+    log(message) {
+        this.output.push(message);
+    }
+
+    // Método para obter e limpar saídas
+    getOutput() {
+        const output = this.output.join('\n');
+        this.output = [];
+        return output;
     }
 
     setupBridgeCommands() {
@@ -23,10 +35,11 @@ class SPUEngine {
         this.commands.set('bridge-backup', this.bridgeBackup.bind(this));
         this.commands.set('bridge-restore', this.bridgeRestore.bind(this));
         this.commands.set('bridge-list-backups', this.bridgeListBackups.bind(this));
+        this.commands.set('help', this.showHelp.bind(this)); // Adicionando comando help
     }
 
     async runCommand(cmd) {
-        console.log('🧠 Interpretando comando:', cmd);
+        this.log('🧠 Interpretando comando: ' + cmd);
         const [command, ...args] = cmd.trim().split(' ');
 
         try {
@@ -34,35 +47,51 @@ class SPUEngine {
                 case 'load':
                     const lib = args[0];
                     if (!lib) {
-                        console.log('📝 Uso: load nome_da_biblioteca');
+                        this.log('📝 Uso: load nome_da_biblioteca');
                         return;
                     }
                     await this.libraryManager.loadLibrary(lib);
-                    console.log(`✅ Biblioteca '${lib}' carregada com sucesso`);
+                    this.log(`✅ Biblioteca '${lib}' carregada com sucesso`);
                     break;
 
                 case 'status':
-                    console.log(this.memory.status());
+                    this.log(this.memory.status());
                     break;
 
                 case 'simular':
                     await this.simular(args.join(' '));
                     break;
 
+                case 'run-file':
+                    if (!args[0]) {
+                        this.log('📝 Uso: run-file <caminho_do_arquivo>');
+                        return;
+                    }
+                    const fs = await import('fs/promises');
+                    const code = await fs.readFile(args[0], 'utf-8');
+                    await this.simular(code);
+                    this.log(`✅ Arquivo '${args[0]}' simulado com sucesso`);
+                    break;
+
+                case 'help':
+                    this.showHelp();
+                    break;
+
                 default:
                     if (this.commands.has(command)) {
                         await this.commands.get(command)(args.join(' '));
                     } else {
-                        console.log('⚙️ Comando não reconhecido:', cmd);
+                        this.log('⚙️ Comando não reconhecido: ' + cmd);
+                        this.log('Digite "help" para ver os comandos disponíveis.');
                     }
             }
         } catch (error) {
-            console.error(`❌ Erro ao executar comando '${cmd}':`, error.message);
+            this.log(`❌ Erro ao executar comando '${cmd}': ${error.message}`);
         }
     }
 
     async simular(code) {
-        console.log('🔍 Simulando código:', code);
+        this.log('🔍 Simulando código: ' + code);
         const actions = this.parseCodeToActions(code);
         for (const action of actions) {
             await this.executeUniversalAction(action, action.lang || 'javascript');
@@ -119,16 +148,16 @@ class SPUEngine {
                         params: action.details.params,
                         bodyActions: []
                     });
-                    console.log(`✅ Função '${action.details.name}' registrada (${lang})`);
+                    this.log(`✅ Função '${action.details.name}' registrada (${lang})`);
                     break;
 
                 case 'assignment':
-                    console.log(`   🔸 ATRIBUINDO: ${action.details.variable} = ${action.details.value}`);
+                    this.log(`   🔸 ATRIBUINDO: ${action.details.variable} = ${action.details.value}`);
                     this.memory.setVariable(action.details.variable, action.details.value);
                     break;
 
                 case 'call':
-                    console.log(`   🔸 EXECUTANDO: ${action.details.function}(${action.details.args.join(', ')})`);
+                    this.log(`   🔸 EXECUTANDO: ${action.details.function}(${action.details.args.join(', ')})`);
                     const libName = action.details.function.split('.')[0];
                     const imports = this.libraryManager.getLoadedLibraries() || [];
                     
@@ -138,68 +167,70 @@ class SPUEngine {
                         
                         if (lib && lib[method]) {
                             const result = await lib[method](...action.details.args);
-                            console.log(`      📊 Resultado: ${JSON.stringify(result).slice(0, 100)}`);
+                            this.log(`      📊 Resultado: ${JSON.stringify(result).slice(0, 100)}`);
                         }
                     } else if (this.bridge.hasFunction(action.details.function)) {
                         try {
                             const result = await this.bridge.callFunction(action.details.function, action.details.args);
-                            console.log(`      🌉 Resultado Cross-Language: ${JSON.stringify(result)}`);
+                            this.log(`      🌉 Resultado Cross-Language: ${JSON.stringify(result)}`);
                         } catch (error) {
-                            console.log(`      ⚠️ Erro no bridge: ${error.message}`);
+                            this.log(`      ⚠️ Erro no bridge: ${error.message}`);
                         }
                     } else if (action.details.function === 'print' || action.details.function === 'console.log') {
-                        console.log(`      🖨️ SAÍDA: ${action.details.args[0]}`);
+                        this.log(`      🖨️ SAÍDA: ${action.details.args[0]}`);
                     } else {
-                        console.log(`      ⚠️ Função '${action.details.function}' não encontrada`);
+                        this.log(`      ⚠️ Função '${action.details.function}' não encontrada`);
                     }
                     break;
 
                 case 'return':
-                    console.log(`   🔸 RETORNANDO: ${action.details.value}`);
+                    this.log(`   🔸 RETORNANDO: ${action.details.value}`);
                     break;
 
                 default:
-                    console.log(`   🔸 Ação desconhecida: ${JSON.stringify(action)}`);
+                    this.log(`   🔸 Ação desconhecida: ${JSON.stringify(action)}`);
             }
         } catch (error) {
-            console.error(`❌ Erro ao executar ação: ${error.message}`);
+            this.log(`❌ Erro ao executar ação: ${error.message}`);
         }
     }
 
     async bridgeStats() {
         const stats = this.bridge.getStats();
-        
-        console.log('\n📊 ESTATÍSTICAS DO BRIDGE CROSS-LANGUAGE');
-        console.log('='.repeat(50));
-        console.log(`📚 Total de Funções: ${stats.totalFunctions}`);
-        
-        console.log('\n🌐 Por Linguagem:');
+        this.log('\n📊 ESTATÍSTICAS DO BRIDGE CROSS-LANGUAGE');
+        this.log('='.repeat(50));
+        this.log(`📚 Total de Funções: ${stats.totalFunctions}`);
+        this.log('\n🌐 Por Linguagem:');
         for (const [lang, count] of Object.entries(stats.byLanguage)) {
-            console.log(`   ${lang}: ${count} funções`);
+            this.log(`   ${lang}: ${count} funções`);
         }
-        
-        console.log('\n🏆 Funções Mais Chamadas:');
+        this.log('\n🏆 Funções Mais Chamadas:');
         stats.mostCalled.slice(0, 5).forEach((func, index) => {
-            console.log(`   ${index + 1}. ${func.name} (${func.lang}): ${func.calls} chamadas`);
+            this.log(`   ${index + 1}. ${func.name} (${func.lang}): ${func.calls} chamadas`);
         });
     }
 
     async bridgeClear() {
-        console.log('⚠️ Tem certeza que deseja limpar TODAS as funções do bridge?');
-        console.log('   Digite "CONFIRMAR" para prosseguir:');
+        this.log('⚠️ Tem certeza que deseja limpar TODAS as funções do bridge?');
+        this.log('   Digite "CONFIRMAR" para prosseguir:');
         
         return new Promise((resolve) => {
+            const rl = readline.createInterface({
+                input: process.stdin,
+                output: process.stdout
+            });
             rl.question('> ', async (answer) => {
                 if (answer === 'CONFIRMAR') {
                     try {
                         const count = await this.bridge.clearRegistry();
-                        console.log(`✅ ${count} funções removidas do bridge`);
+                        this.log(`✅ ${count} funções removidas do bridge`);
                     } catch (error) {
-                        console.error('❌ Erro ao limpar o bridge:', error.message);
+                        this.log('❌ Erro ao limpar o bridge: ' + error.message);
                     }
                 } else {
-                    console.log('❌ Operação cancelada');
+                    this.log('❌ Operação cancelada');
                 }
+                rl.close();
                 resolve();
             });
         });
@@ -207,89 +238,75 @@ class SPUEngine {
 
     async bridgeRemove(funcName) {
         if (!funcName) {
-            console.log('📝 Uso: bridge-remove nome_da_funcao');
+            this.log('📝 Uso: bridge-remove nome_da_funcao');
             return;
         }
         
         const removed = await this.bridge.unregisterFunction(funcName);
         if (removed) {
-            console.log(`✅ Função '${funcName}' removida do bridge`);
+            this.log(`✅ Função '${funcName}' removida do bridge`);
         } else {
-            console.log(`❌ Função '${funcName}' não encontrada`);
+            this.log(`❌ Função '${funcName}' não encontrada`);
         }
     }
 
     async bridgeSave() {
         await this.bridge.saveToStorage();
-        console.log('✅ Estado do bridge salvo persistentemente');
+        this.log('✅ Estado do bridge salvo persistentemente');
     }
 
     async bridgeBackup(backupName) {
         const name = backupName || `manual_${Date.now()}`;
         await this.backupManager.createBackup(name);
+        this.log(`✅ Backup '${name}' criado com sucesso`);
     }
 
     async bridgeRestore(backupName) {
         if (!backupName) {
-            console.log('📝 Uso: bridge-restore nome_do_backup');
+            this.log('📝 Uso: bridge-restore nome_do_backup');
             return;
         }
         
         await this.backupManager.restoreBackup(backupName);
+        this.log(`✅ Backup '${backupName}' restaurado com sucesso`);
     }
 
     async bridgeListBackups() {
         const backups = await this.backupManager.listBackups();
-        
-        console.log('\n💾 BACKUPS DISPONÍVEIS:');
-        console.log('='.repeat(50));
+        this.log('\n💾 BACKUPS DISPONÍVEIS:');
+        this.log('='.repeat(50));
         
         if (backups.length === 0) {
-            console.log('   Nenhum backup encontrado');
+            this.log('   Nenhum backup encontrado');
             return;
         }
         
         backups.forEach((backup, index) => {
-            console.log(`${index + 1}. ${backup.name}`);
-            console.log(`   📅 ${backup.created.toLocaleString()}`);
-            console.log(`   📊 ${Math.round(backup.size / 1024)} KB\n`);
+            this.log(`${index + 1}. ${backup.name}`);
+            this.log(`   📅 ${backup.created.toLocaleString()}`);
+            this.log(`   📊 ${Math.round(backup.size / 1024)} KB\n`);
         });
     }
+
+    showHelp() {
+        this.log(`
+📖 Comandos disponíveis no SPU:
+==============================
+load <biblioteca>         - Carrega uma biblioteca para uso no simulador
+status                   - Exibe o estado da memória virtual
+simular <código>         - Simula a execução de um trecho de código
+run-file <arquivo>       - Simula um arquivo de código
+bridge-stats             - Mostra estatísticas do CrossLanguageBridge
+bridge-clear             - Limpa todas as funções do bridge (requer confirmação)
+bridge-remove <função>   - Remove uma função específica do bridge
+bridge-save              - Salva o estado do bridge
+bridge-backup [nome]     - Cria um backup do estado do bridge
+bridge-restore <nome>    - Restaura um backup do bridge
+bridge-list-backups      - Lista todos os backups disponíveis
+help                     - Mostra esta ajuda
+==============================
+        `);
+    }
 }
 
-// engine.js
-import readline from 'readline';
-
-// --- Classe principal ---
-class SPUEngine {
-    constructor() {
-        console.log('🧠 SPUEngine inicializado');
-        // ... (resto do construtor e métodos)
-    }
-
-    async runCommand(cmd) {
-        console.log(`🔧 Executando comando: ${cmd}`);
-        // ... (código do método)
-    }
-}
-
-// --- Exportação da classe ---
 export { SPUEngine };
-
-// --- Interface de linha de comando (CLI) ---
-const SPU = new SPUEngine();
-console.log('🚀 SPU iniciado. Digite comandos para simular programação.');
-
-const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout
-});
-
-async function prompt() {
-    rl.question('SPU> ', async (input) => {
-        await SPU.runCommand(input);
-        prompt();
-    });
-}
-
-prompt();
